@@ -7,18 +7,10 @@
 # YOLO model weights
 *.pt
 
-# Output videos
-output/
-
 # Python cache
 __pycache__/
 *.pyc
 *.pyo
-
-# Screenshots
-*.png
-*.jpg
-*.jpeg
 
 # OS files
 .DS_Store
