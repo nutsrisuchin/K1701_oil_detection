@@ -10,27 +10,27 @@ from ultralytics import YOLO
 # STRICT DROP ZONE (Square): (x_min, x_max, y_min, y_max)
 # Values represent the ratio (0.0 to 1.0) of the glass bounding box.
 DROP_ZONE_CONFIG = {
-    0: (0.4, 0.8, 0.5, 0.9),  
+    0: (0.4, 0.8, 0.5, 0.9),
     1: (0.4, 0.8, 0.5, 0.9),
     2: (0.4, 0.8, 0.65, 0.9),
     3: (0.4, 0.8, 0.5, 0.9),
-    4: (0.3, 0.7, 0.6, 0.9),  
+    4: (0.3, 0.7, 0.6, 0.9),
     5: (0.3, 0.7, 0.56, 0.9),
-    6: (0.4, 0.7, 0.55, 0.9) 
+    6: (0.4, 0.7, 0.55, 0.9)
 }
 
 # ==========================================
-# 1. THE PRESENCE TRACKER CLASS 
+# 1. THE PRESENCE TRACKER CLASS
 # ==========================================
 class SightGlass:
     def __init__(self, glass_id, drop_zone_ratios):
         self.glass_id = glass_id
         self.total_drops = 0
         self.drop_timestamps = deque()
-        
+
         # Unpack the specific drop zone for this glass
         self.x_min_ratio, self.x_max_ratio, self.y_min_ratio, self.y_max_ratio = drop_zone_ratios
-        
+
         self.prev_zone_count = 0
         self.prev_ids_in_zone = set()  # IDs in zone last frame
 
@@ -121,26 +121,31 @@ class SightGlass:
 # 2. MAIN EXECUTION LOOP (FULL FRAME INFERENCE)
 # ==========================================
 def main():
+    # Paths are configurable via environment variables so this runs in a container.
+    # Mount your models, video, and output directory via Docker volumes.
+    model_dir = os.environ.get('MODEL_DIR', '/app/models')
+    video_source = os.environ.get('VIDEO_SOURCE', '/data/input/video.mp4')
+    final_output_dir = os.environ.get('OUTPUT_DIR', '/data/output')
+    # Set HEADLESS=true when running without a display (default in containers).
+    headless = os.environ.get('HEADLESS', 'true').lower() == 'true'
+
     print("Loading YOLO models...")
-    base_dir = '/Users/nutsrisuchin/Library/CloudStorage/OneDrive-PTTGlobalChemicalPublicCompanyLimited/DATA/Digital & IT/Code - Visual Studio/K1701_oil_detection'
-    model_glass = YOLO(f'{base_dir}/best_glass.pt')
-    model_bubble = YOLO(f'{base_dir}/best_bubble.pt')
+    model_glass = YOLO(f'{model_dir}/best_glass.pt')
+    model_bubble = YOLO(f'{model_dir}/best_bubble.pt')
 
     trackers = {}
-    video_source = '/Users/nutsrisuchin/Library/CloudStorage/OneDrive-PTTGlobalChemicalPublicCompanyLimited/DATA/Digital & IT/Code - Visual Studio/K1701_oil_detection/MVI_9973.MP4'
     cap = cv2.VideoCapture(video_source)
 
     if not cap.isOpened():
         print(f"Error: Could not open video source {video_source}")
         return
 
-    final_output_dir = '/Users/nutsrisuchin/Library/CloudStorage/OneDrive-PTTGlobalChemicalPublicCompanyLimited/DATA/Digital & IT/Code - Visual Studio/K1701_oil_detection/output'
     os.makedirs(final_output_dir, exist_ok=True)
     video_name = os.path.splitext(os.path.basename(video_source))[0]
     timestamp = time.strftime("%Y%m%d_%H%M%S")
     filename = f"{video_name}_final_{timestamp}.mp4"
 
-    # Write to /tmp first (avoids OpenCV issues with spaces/& in path)
+    # Write to /tmp first (avoids issues with spaces/special chars in path)
     tmp_output_path = os.path.join('/tmp', filename)
     final_output_path = os.path.join(final_output_dir, filename)
 
@@ -158,7 +163,7 @@ def main():
         print("Error: No working video codec found.")
         return
 
-    print("Starting visual pipeline. Press 'q' to quit.")
+    print(f"Starting pipeline. Headless={headless}. Press 'q' to quit (display mode only).")
 
     while cap.isOpened():
         success, frame = cap.read()
@@ -175,7 +180,7 @@ def main():
             for box in result.boxes:
                 x1, y1, x2, y2 = map(int, box.xyxy[0])
                 glass_boxes.append((x1, y1, x2, y2))
-        
+
         glass_boxes.sort(key=lambda b: b[0]) # Sort left to right
 
         # Bubbles: track() assigns persistent IDs across frames (ByteTrack)
@@ -194,11 +199,11 @@ def main():
         # ---------------------------------------------------------
         for i, glass_box in enumerate(glass_boxes):
             gx1, gy1, gx2, gy2 = glass_box
-            
+
             if i not in trackers:
                 zone_config = DROP_ZONE_CONFIG.get(i, (0.1, 0.9, 0.1, 0.9))
                 trackers[i] = SightGlass(glass_id=i, drop_zone_ratios=zone_config)
-            
+
             # Filter: Which bubbles are physically inside the Green Box of THIS specific glass?
             bubbles_in_this_glass = []
             for (bx1, by1, bx2, by2, track_id) in all_bubble_boxes:
@@ -211,14 +216,16 @@ def main():
             trackers[i].update_and_count(frame, glass_box, bubbles_in_this_glass)
 
         out.write(frame)
-        cv2.imshow("Automated Lubrication Monitor", frame)
 
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
+        if not headless:
+            cv2.imshow("Automated Lubrication Monitor", frame)
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
 
     cap.release()
     out.release()
-    cv2.destroyAllWindows()
+    if not headless:
+        cv2.destroyAllWindows()
 
     import shutil
     shutil.move(tmp_output_path, final_output_path)

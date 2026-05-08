@@ -1,0 +1,9 @@
+.git
+.DS_Store
+__pycache__
+*.pyc
+output/
+*.MP4
+*.mp4
+*.png
+Screenshot*

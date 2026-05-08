@@ -1,0 +1,23 @@
+services:
+  oil-detection:
+    build: .
+    image: k1701-oil-detection:latest
+    environment:
+      MODEL_DIR: /app/models
+      VIDEO_SOURCE: /data/input/MVI_9973.MP4
+      OUTPUT_DIR: /data/output
+      HEADLESS: "true"
+    volumes:
+      # Mount the directory containing your video file
+      - .:/data/input:ro
+      # Mount the output directory to retrieve the annotated video
+      - ./output:/data/output
+
+    # Uncomment the block below to enable GPU acceleration (requires nvidia-docker)
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
