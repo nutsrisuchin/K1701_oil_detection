@@ -1,2 +1,7 @@
 *.mp4
 *.MP4
+
+# OneDrive cloud-only placeholder files / scratch notes in root
+/main_2_rev1.py
+/note
+/note.txt
